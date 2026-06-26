@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式 PDF 課堂教學畫記工具</title>
+    <!-- Tailwind CSS for modern design styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for beautiful pedagogical icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PDF.js library for rendering textbook PDFs inside browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+        }
+        /* Custom scrollbars for professional dashboard feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col overflow-hidden">
+
+    <!-- Top Action Navigation Bar -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between shadow-md z-30 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-indigo-500 to-violet-600 p-2.5 rounded-xl shadow-lg shadow-indigo-500/20">
+                <i class="fa-solid fa-file-pdf text-xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="text-md font-bold text-white tracking-wide">互動式 PDF 課堂畫記教學工具</h1>
+                <p class="text-xs text-slate-400">寫入的重點將自動儲存，可匯出 PNG 重點圖發給學生</p>
+            </div>
+        </div>
+        
+        <!-- File Uploader & Default Mock Trigger -->
+        <div class="flex items-center space-x-3">
+            <label class="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white px-4 py-2 rounded-xl text-sm font-medium transition cursor-pointer border border-slate-600 shadow-sm">
+                <i class="fa-solid fa-cloud-arrow-up text-indigo-400"></i>
+                <span>上傳課本 PDF</span>
+                <input type="file" id="pdf-upload" accept=".pdf" class="hidden">
+            </label>
+            <button id="reset-to-demo" class="text-xs text-slate-400 hover:text-white underline transition decoration-slate-500 hover:decoration-white">
+                切換回範例課本
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Floating Drawing Toolbar (Left) -->
+        <div class="absolute left-6 top-6 bottom-6 w-20 bg-slate-800/90 backdrop-blur-md border border-slate-700 rounded-2xl flex flex-col items-center justify-between py-6 shadow-2xl z-40">
+            <!-- Tool Selectors -->
+            <div class="flex flex-col space-y-4 w-full px-3">
+                <div class="text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">工具</div>
+                
+                <!-- Pen Tool -->
+                <button id="tool-pen" class="tool-btn active w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-200 relative group" title="課堂原子筆">
+                    <i class="fa-solid fa-pen text-lg"></i>
+                    <span class="text-[10px] mt-0.5 font-medium">原子筆</span>
+                    <span class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-12 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap shadow-md">教學鋼筆 (P)</span>
+                </button>
+
+                <!-- Highlighter Tool -->
+                <button id="tool-highlighter" class="tool-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-200 relative group text-slate-400 hover:text-white" title="課文螢光筆">
+                    <i class="fa-solid fa-highlighter text-lg text-yellow-400/80"></i>
+                    <span class="text-[10px] mt-0.5 font-medium">螢光筆</span>
+                    <span class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-12 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap shadow-md">課文螢光筆 (H)</span>
+                </button>
+
+                <!-- Eraser Tool -->
+                <button id="tool-eraser" class="tool-btn w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all duration-200 relative group text-slate-400 hover:text-white" title="橡皮擦">
+                    <i class="fa-solid fa-eraser text-lg text-pink-400"></i>
+                    <span class="text-[10px] mt-0.5 font-medium">橡皮擦</span>
+                    <span class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-12 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap shadow-md">橡皮擦 (E)</span>
+                </button>
+            </div>
+
+            <!-- Stylus Adjustments (Middle) -->
+            <div class="flex flex-col space-y-4 w-full px-3 items-center">
+                <div class="h-[1px] w-8 bg-slate-700"></div>
+                
+                <!-- Color Indicator Circle -->
+                <div id="active-color-btn" class="w-8 h-8 rounded-full border-2 border-slate-100 cursor-pointer shadow-inner relative group" style="background-color: #ef4444;">
+                    <!-- Floating Color Palette -->
+                    <div id="palette-dropdown" class="hidden absolute left-12 bottom-0 bg-slate-800 border border-slate-700 rounded-xl p-3 shadow-2xl flex flex-row space-x-2 z-50">
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #ef4444;" data-color="#ef4444"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #3b82f6;" data-color="#3b82f6"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #22c55e;" data-color="#22c55e"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #eab308;" data-color="#eab308"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #a855f7;" data-color="#a855f7"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #000000;" data-color="#000000"></button>
+                        <button class="color-picker-opt w-7 h-7 rounded-full border border-white/20 hover:scale-110 transition" style="background-color: #ffffff;" data-color="#ffffff"></button>
+                    </div>
+                </div>
+
+                <!-- Stroke Thickness Selection -->
+                <button id="size-toggle-btn" class="w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-xs text-white cursor-pointer relative group">
+                    <span id="active-size-label" class="font-bold">4px</span>
+                    <!-- Thickness list -->
+                    <div id="size-dropdown" class="hidden absolute left-12 bottom-0 bg-slate-800 border border-slate-700 rounded-xl p-3 shadow-2xl flex flex-col space-y-2 z-50">
+                        <button class="size-opt-btn text-xs text-slate-300 hover:text-white px-2 py-1 hover:bg-slate-700 rounded" data-size="2">細 (2px)</button>
+                        <button class="size-opt-btn text-xs text-slate-300 hover:text-white px-2 py-1 hover:bg-slate-700 rounded font-semibold" data-size="4">中 (4px)</button>
+                        <button class="size-opt-btn text-xs text-slate-300 hover:text-white px-2 py-1 hover:bg-slate-700 rounded font-bold" data-size="8">粗 (8px)</button>
+                        <button class="size-opt-btn text-xs text-slate-300 hover:text-white px-2 py-1 hover:bg-slate-700 rounded font-black" data-size="16">巨 (16px)</button>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Page Action Control Buttons -->
+            <div class="flex flex-col space-y-3 w-full px-3">
+                <div class="h-[1px] w-8 bg-slate-700 mx-auto"></div>
+                
+                <!-- Undo Button -->
+                <button id="btn-undo" class="w-12 h-10 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition relative group" title="復原上一筆">
+                    <i class="fa-solid fa-rotate-left text-base"></i>
+                    <span class="text-[9px] mt-0.5">復原</span>
+                </button>
+
+                <!-- Clear Page Canvas Button -->
+                <button id="btn-clear" class="w-12 h-10 rounded-xl flex flex-col items-center justify-center text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 transition relative group" title="清除此頁所有筆記">
+                    <i class="fa-solid fa-trash-can text-base"></i>
+                    <span class="text-[9px] mt-0.5">清空</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Floating Canvas Navigation Controls (Top Center) -->
+        <div class="absolute left-1/2 -translate-x-1/2 top-6 bg-slate-800/90 backdrop-blur-md border border-slate-700 px-6 py-3 rounded-full flex items-center space-x-6 shadow-2xl z-40">
+            <!-- Page Switching -->
+            <div class="flex items-center space-x-3">
+                <button id="btn-prev-page" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition disabled:opacity-30 disabled:pointer-events-none">
+                    <i class="fa-solid fa-chevron-left text-sm"></i>
+                </button>
+                <div class="text-sm font-semibold whitespace-nowrap">
+                    第 <span id="current-page-num" class="text-indigo-400">1</span> 頁 / 共 <span id="total-pages-num" class="text-slate-400">1</span> 頁
+                </div>
+                <button id="btn-next-page" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition disabled:opacity-30 disabled:pointer-events-none">
+                    <i class="fa-solid fa-chevron-right text-sm"></i>
+                </button>
+            </div>
+
+            <div class="h-6 w-[1px] bg-slate-700"></div>
+
+            <!-- Zoom controls -->
+            <div class="flex items-center space-x-2">
+                <button id="btn-zoom-out" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition">
+                    <i class="fa-solid fa-magnifying-glass-minus text-sm"></i>
+                </button>
+                <span id="zoom-label" class="text-xs font-semibold w-12 text-center">100%</span>
+                <button id="btn-zoom-in" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition">
+                    <i class="fa-solid fa-magnifying-glass-plus text-sm"></i>
+                </button>
+            </div>
+
+            <div class="h-6 w-[1px] bg-slate-700"></div>
+
+            <!-- Export to PNG Trigger -->
+            <button id="btn-export-png" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-full text-xs font-bold tracking-wider flex items-center space-x-2 transition shadow-lg shadow-indigo-600/20 hover:scale-105 active:scale-95">
+                <i class="fa-solid fa-image text-sm"></i>
+                <span>導出此頁 PNG</span>
+            </button>
+        </div>
+
+        <!-- Center Scrollable Canvas Viewport -->
+        <div class="flex-1 overflow-auto flex items-start justify-center p-24 pt-28 pb-12 bg-slate-900" id="viewport-container">
+            <!-- Relative Canvas Wrapper -->
+            <div id="canvas-wrapper" class="relative bg-white shadow-2xl rounded-sm transition-transform duration-100 ease-out origin-top">
+                <!-- Bottom Layer: PDF Canvas (Or Demo Image Canvas) -->
+                <canvas id="pdf-canvas" class="absolute top-0 left-0 rounded-sm z-10 block pointer-events-none"></canvas>
+                <!-- Top Layer: Drawing Brush Canvas -->
+                <canvas id="drawing-canvas" class="absolute top-0 left-0 rounded-sm z-20 block touch-none cursor-crosshair"></canvas>
+            </div>
+        </div>
+
+        <!-- Floating UI Status Alert Banner -->
+        <div id="toast-banner" class="fixed bottom-6 right-6 bg-slate-800 border border-slate-700 px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transform translate-y-24 opacity-0 transition-all duration-300 z-50">
+            <div class="bg-emerald-500 text-slate-950 p-1.5 rounded-lg flex items-center justify-center">
+                <i class="fa-solid fa-circle-check text-sm"></i>
+            </div>
+            <span id="toast-message" class="text-sm font-medium text-slate-100">筆記已自動安全存檔！</span>
+        </div>
+    </div>
+
+    <script>
+        // Set worker location for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Custom Styles integration for selected tools
+        const style = document.createElement('style');
+        style.textContent = `
+            .tool-btn.active {
+                background-color: #4f46e5;
+                color: #ffffff !important;
+                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+            }
+        `;
+        document.head.appendChild(style);
+
+        // --- GLOBAL VARIABLES ---
+        let db = null;
+        let pdfDoc = null;
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentScale = 1.3;
+        let activeTool = 'pen'; // 'pen', 'highlighter', 'eraser'
+        let strokeColor = '#ef4444'; // default red
+        let strokeSize = 4;
+        let highlighterOpacity = 0.45;
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let loadedPdfName = "demo_textbook"; // storage key fallback
+        let undoStack = [];
+        const maxUndoSteps = 15;
+
+        // Elements
+        const pdfCanvas = document.getElementById('pdf-canvas');
+        const drawingCanvas = document.getElementById('drawing-canvas');
+        const pdfCtx = pdfCanvas.getContext('2d');
+        const drawingCtx = drawingCanvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+
+        // Initialize Database for Auto-Save feature
+        function initDatabase() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('PDFClassroomAnnotationDB', 1);
+                request.onupgradeneeded = (e) => {
+                    const database = e.target.result;
+                    if (!database.objectStoreNames.contains('annotations')) {
+                        database.createObjectStore('annotations');
+                    }
+                };
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve(db);
+                };
+                request.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        // --- DATABASE INTERACTION WRAPPERS ---
+        function saveAnnotationToDB(pageNo, dataUrl) {
+            if (!db) return;
+            const transaction = db.transaction('annotations', 'readwrite');
+            const store = transaction.objectStore('annotations');
+            const storageKey = `${loadedPdfName}_page_${pageNo}`;
+            store.put(dataUrl, storageKey);
+        }
+
+        function loadAnnotationFromDB(pageNo) {
+            return new Promise((resolve) => {
+                if (!db) return resolve(null);
+                const transaction = db.transaction('annotations', 'readonly');
+                const store = transaction.objectStore('annotations');
+                const storageKey = `${loadedPdfName}_page_${pageNo}`;
+                const request = store.get(storageKey);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => resolve(null);
+            });
+        }
+
+        function clearAnnotationInDB(pageNo) {
+            if (!db) return;
+            const transaction = db.transaction('annotations', 'readwrite');
+            const store = transaction.objectStore('annotations');
+            const storageKey = `${loadedPdfName}_page_${pageNo}`;
+            store.delete(storageKey);
+        }
+
+        // Save current canvas state to history for Undo functionality
+        function pushCanvasToUndoStack() {
+            if (undoStack.length >= maxUndoSteps) {
+                undoStack.shift();
+            }
+            undoStack.push(drawingCanvas.toDataURL());
+        }
+
+        function triggerUndo() {
+            if (undoStack.length === 0) return;
+            const previousStateUrl = undoStack.pop();
+            
+            // Re-draw previous state
+            const img = new Image();
+            img.onload = () => {
+                drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                drawingCtx.drawImage(img, 0, 0);
+                // Save to IndexedDB automatically
+                saveAnnotationToDB(currentPage, drawingCanvas.toDataURL());
+                showToast("已成功復原上一筆筆記！");
+            };
+            img.src = previousStateUrl || '';
+            if(!previousStateUrl) {
+                drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                saveAnnotationToDB(currentPage, null);
+            }
+        }
+
+        // Generates an educational layout context in case no PDF is loaded initially
+        function drawDemoTextbookPage(ctx, width, height) {
+            // Background color (Warm paper textbook vibe)
+            ctx.fillStyle = '#fdfbf7';
+            ctx.fillRect(0, 0, width, height);
+
+            // Left Margin Line
+            ctx.strokeStyle = '#f1e6d4';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(60, 0);
+            ctx.lineTo(60, height);
+            ctx.stroke();
+
+            // Header Elements
+            ctx.fillStyle = '#4f46e5';
+            ctx.font = 'bold 24px "Noto Sans TC", sans-serif';
+            ctx.fillText('國語課文第七課：〈湖光秋月兩相和〉', 70, 80);
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '14px "Noto Sans TC", sans-serif';
+            ctx.fillText('學期必讀經典詩詞賞析 ． 教學輔助板書頁', 70, 105);
+
+            // Divider Line
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(70, 125);
+            ctx.lineTo(width - 70, 125);
+            ctx.stroke();
+
+            // Main Text (Paragraph 1)
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 20px "Noto Sans TC", sans-serif';
+            ctx.fillText('【經典詩文】', 70, 170);
+
+            ctx.font = 'regular 18px "Noto Sans TC", sans-serif';
+            const lines = [
+                "湖光秋月兩相和，潭面無風鏡未磨。",
+                "遙望洞庭山水翠，白銀盤裡一青螺。",
+                "",
+                "【注釋與重點說明】",
+                "1. 兩相和：湖光與秋色互相輝映，和諧融洽。",
+                "2. 鏡未磨：古代用銅鏡，未經磨拭的銅鏡邊緣有一層霧面感，",
+                "   在此隱喻洞庭湖面風平浪靜、朦朧而溫潤的光澤韻致。",
+                "3. 青螺：形容洞庭湖中的君山，宛如精緻白銀盤托著的一顆小青螺。",
+                "",
+                "【課堂思考與分組探討】",
+                "▶ 詩人劉禹錫在此詩中，運用了哪些精妙的比喻手法？",
+                "▶ 面對湖光秋月，詩人寄託了何種開闊的心境？"
+            ];
+
+            let startY = 210;
+            lines.forEach((line) => {
+                if (line.startsWith('【')) {
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+                    startY += 15;
+                } else if (line.startsWith('▶')) {
+                    ctx.fillStyle = '#0f766e';
+                    ctx.font = 'medium 16px "Noto Sans TC", sans-serif';
+                } else {
+                    ctx.fillStyle = '#334155';
+                    ctx.font = '16px "Noto Sans TC", sans-serif';
+                }
+                ctx.fillText(line, 80, startY);
+                startY += 32;
+            });
+
+            // Decorative Graphic Simulation (Textbook Picture Box)
+            const imgBoxX = width - 290;
+            const imgBoxY = 160;
+            const imgBoxW = 220;
+            const imgBoxH = 180;
+
+            // Draw Box
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(imgBoxX, imgBoxY, imgBoxW, imgBoxH);
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(imgBoxX, imgBoxY, imgBoxW, imgBoxH);
+
+            // Graphic Details inside box
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.arc(imgBoxX + 110, imgBoxY + 70, 45, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '13px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('[ 洞庭湖山水概念圖 ]', imgBoxX + 110, imgBoxY + 140);
+            ctx.fillText('（請在此區域繪製標註）', imgBoxX + 110, imgBoxY + 160);
+            ctx.textAlign = 'left'; // reset
+        }
+
+        // Setup scaling and synchronize both PDF canvas and Drawing overlay canvas
+        function setupCanvasDimensions(width, height) {
+            // Apply scale to dimensions
+            const scaledWidth = width * currentScale;
+            const scaledHeight = height * currentScale;
+
+            // Update wrapper width/height
+            canvasWrapper.style.width = `${scaledWidth}px`;
+            canvasWrapper.style.height = `${scaledHeight}px`;
+
+            // Canvas coordinate systems configuration
+            pdfCanvas.width = scaledWidth;
+            pdfCanvas.height = scaledHeight;
+            pdfCanvas.style.width = `${scaledWidth}px`;
+            pdfCanvas.style.height = `${scaledHeight}px`;
+
+            // Drawing Canvas coordinate system matching
+            drawingCanvas.width = scaledWidth;
+            drawingCanvas.height = scaledHeight;
+            drawingCanvas.style.width = `${scaledWidth}px`;
+            drawingCanvas.style.height = `${scaledHeight}px`;
+
+            // Reset Drawing Context configurations (they wipe when width resets)
+            configureDrawingContext();
+        }
+
+        function configureDrawingContext() {
+            drawingCtx.lineCap = 'round';
+            drawingCtx.lineJoin = 'round';
+            
+            if (activeTool === 'pen') {
+                drawingCtx.globalCompositeOperation = 'source-over';
+                drawingCtx.strokeStyle = strokeColor;
+                drawingCtx.lineWidth = strokeSize;
+            } else if (activeTool === 'highlighter') {
+                // Highlighter uses semi-transparent drawing
+                drawingCtx.globalCompositeOperation = 'source-over';
+                // Convert hex to rgba
+                const rgb = hexToRgb(strokeColor);
+                drawingCtx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${highlighterOpacity})`;
+                drawingCtx.lineWidth = strokeSize * 3; // naturally thicker
+            } else if (activeTool === 'eraser') {
+                // Eraser cuts through drawing canvas, showing underlying PDF
+                drawingCtx.globalCompositeOperation = 'destination-out';
+                drawingCtx.lineWidth = strokeSize * 4; // bigger range
+            }
+        }
+
+        // Help utility to convert Hex to RGB
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        // Renders either dynamic sample or the loaded PDF page
+        async function renderCurrentPage() {
+            // Update Page indicator numbers
+            document.getElementById('current-page-num').innerText = currentPage;
+            document.getElementById('total-pages-num').innerText = totalPages;
+            document.getElementById('zoom-label').innerText = `${Math.round(currentScale * 100)}%`;
+
+            // Clear canvases before updating
+            pdfCtx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            undoStack = []; // reset undo steps on page changes
+
+            if (pdfDoc === null) {
+                // Draw beautiful custom educational template
+                totalPages = 1;
+                document.getElementById('total-pages-num').innerText = totalPages;
+                setupCanvasDimensions(800, 1050); // standard textbook ratio
+                drawDemoTextbookPage(pdfCtx, pdfCanvas.width, pdfCanvas.height);
+                
+                // Fetch saved drawing overlay from Database
+                const savedImage = await loadAnnotationFromDB(currentPage);
+                if (savedImage) {
+                    const img = new Image();
+                    img.onload = () => drawingCtx.drawImage(img, 0, 0);
+                    img.src = savedImage;
+                }
+            } else {
+                // PDF is loaded
+                try {
+                    const page = await pdfDoc.getPage(currentPage);
+                    const viewport = page.getViewport({ scale: currentScale });
+                    
+                    setupCanvasDimensions(viewport.width / currentScale, viewport.height / currentScale);
+                    
+                    const renderContext = {
+                        canvasContext: pdfCtx,
+                        viewport: viewport
+                    };
+                    await page.render(renderContext).promise;
+
+                    // Fetch saved drawing overlay from Database
+                    const savedImage = await loadAnnotationFromDB(currentPage);
+                    if (savedImage) {
+                        const img = new Image();
+                        img.onload = () => drawingCtx.drawImage(img, 0, 0);
+                        img.src = savedImage;
+                    }
+                } catch (error) {
+                    console.error("PDF render failure: ", error);
+                }
+            }
+        }
+
+        // Drawing action handlers supporting Mouse and iPad stylus/Touch
+        function getCoordinates(e) {
+            const rect = drawingCanvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // Adjust coordinates based on viewport scaling and canvas bounding rect
+            const x = (clientX - rect.left) * (drawingCanvas.width / rect.width);
+            const y = (clientY - rect.top) * (drawingCanvas.height / rect.height);
+            return { x, y };
+        }
+
+        function startDrawingAction(e) {
+            // Disable page drag scroll on canvas touch
+            if (e.cancelable) e.preventDefault();
+            
+            pushCanvasToUndoStack();
+            isDrawing = true;
+            const coords = getCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
+
+            // Draw a single dot immediately on press
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            drawingCtx.lineTo(lastX + 0.1, lastY); // micro segment to render a dot
+            drawingCtx.stroke();
+        }
+
+        function continueDrawingAction(e) {
+            if (!isDrawing) return;
+            if (e.cancelable) e.preventDefault();
+
+            const coords = getCoordinates(e);
+            
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            drawingCtx.lineTo(coords.x, coords.y);
+            drawingCtx.stroke();
+
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function stopDrawingAction() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            
+            // Save current drawing state to local IndexedDB automatic storage
+            saveAnnotationToDB(currentPage, drawingCanvas.toDataURL());
+            showToast("筆記已自動存檔");
+        }
+
+        // Canvas Touch/Mouse Events binding
+        drawingCanvas.addEventListener('mousedown', startDrawingAction);
+        drawingCanvas.addEventListener('mousemove', continueDrawingAction);
+        window.addEventListener('mouseup', stopDrawingAction);
+
+        drawingCanvas.addEventListener('touchstart', startDrawingAction, { passive: false });
+        drawingCanvas.addEventListener('touchmove', continueDrawingAction, { passive: false });
+        window.addEventListener('touchend', stopDrawingAction);
+
+        // Core functionality for uploading custom local teaching PDFs
+        const fileInput = document.getElementById('pdf-upload');
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            loadedPdfName = encodeURIComponent(file.name);
+            const fileReader = new FileReader();
+            
+            fileReader.onload = async function() {
+                const typedarray = new Uint8Array(this.result);
+                try {
+                    const loadingTask = pdfjsLib.getDocument(typedarray);
+                    pdfDoc = await loadingTask.promise;
+                    totalPages = pdfDoc.numPages;
+                    currentPage = 1;
+                    renderCurrentPage();
+                    showToast("課本 PDF 載入成功！開始您的教學畫記。");
+                } catch (error) {
+                    alert("載入 PDF 時發生錯誤，請確認檔案結構是否正確。");
+                }
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+
+        // Toggle back to beautiful built-in textbook template
+        document.getElementById('reset-to-demo').addEventListener('click', () => {
+            pdfDoc = null;
+            loadedPdfName = "demo_textbook";
+            currentPage = 1;
+            renderCurrentPage();
+            showToast("已重置為系統範例課本");
+        });
+
+        // Handlers for switching tools (Pen, Highlighter, Eraser)
+        const toolPenBtn = document.getElementById('tool-pen');
+        const toolHighlighterBtn = document.getElementById('tool-highlighter');
+        const toolEraserBtn = document.getElementById('tool-eraser');
+
+        function selectTool(tool) {
+            activeTool = tool;
+            
+            // UI elements update
+            toolPenBtn.classList.remove('active');
+            toolHighlighterBtn.classList.remove('active');
+            toolEraserBtn.classList.remove('active');
+
+            if (tool === 'pen') {
+                toolPenBtn.classList.add('active');
+            } else if (tool === 'highlighter') {
+                toolHighlighterBtn.classList.add('active');
+            } else if (tool === 'eraser') {
+                toolEraserBtn.classList.add('active');
+            }
+            configureDrawingContext();
+        }
+
+        toolPenBtn.addEventListener('click', () => selectTool('pen'));
+        toolHighlighterBtn.addEventListener('click', () => selectTool('highlighter'));
+        toolEraserBtn.addEventListener('click', () => selectTool('eraser'));
+
+        // Color picking menu
+        const colorIndicator = document.getElementById('active-color-btn');
+        const paletteDropdown = document.getElementById('palette-dropdown');
+
+        colorIndicator.addEventListener('click', (e) => {
+            e.stopPropagation();
+            paletteDropdown.classList.toggle('hidden');
+            sizeDropdown.classList.add('hidden'); // Close other dropdown
+        });
+
+        const colorOptions = document.querySelectorAll('.color-picker-opt');
+        colorOptions.forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                strokeColor = opt.getAttribute('data-color');
+                colorIndicator.style.backgroundColor = strokeColor;
+                paletteDropdown.classList.add('hidden');
+                configureDrawingContext();
+            });
+        });
+
+        // Size picking menu
+        const sizeToggleBtn = document.getElementById('size-toggle-btn');
+        const sizeDropdown = document.getElementById('size-dropdown');
+        const activeSizeLabel = document.getElementById('active-size-label');
+
+        sizeToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sizeDropdown.classList.toggle('hidden');
+            paletteDropdown.classList.add('hidden'); // Close other dropdown
+        });
+
+        const sizeOptions = document.querySelectorAll('.size-opt-btn');
+        sizeOptions.forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                strokeSize = parseInt(opt.getAttribute('data-size'));
+                activeSizeLabel.innerText = `${strokeSize}px`;
+                sizeDropdown.classList.add('hidden');
+                configureDrawingContext();
+            });
+        });
+
+        // Close dropdowns when clicking outside
+        window.addEventListener('click', () => {
+            paletteDropdown.classList.add('hidden');
+            sizeDropdown.classList.add('hidden');
+        });
+
+        // Keyboard shortcuts for seamless classroom flow
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'p' || e.key === 'P') selectTool('pen');
+            if (e.key === 'h' || e.key === 'H') selectTool('highlighter');
+            if (e.key === 'e' || e.key === 'E') selectTool('eraser');
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+                e.preventDefault();
+                triggerUndo();
+            }
+        });
+
+        // Navigation controls and PNG Export actions
+        document.getElementById('btn-prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderCurrentPage();
+            }
+        });
+
+        document.getElementById('btn-next-page').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderCurrentPage();
+            }
+        });
+
+        document.getElementById('btn-zoom-in').addEventListener('click', () => {
+            if (currentScale < 3.0) {
+                currentScale += 0.15;
+                renderCurrentPage();
+            }
+        });
+
+        document.getElementById('btn-zoom-out').addEventListener('click', () => {
+            if (currentScale > 0.6) {
+                currentScale -= 0.15;
+                renderCurrentPage();
+            }
+        });
+
+        document.getElementById('btn-undo').addEventListener('click', triggerUndo);
+
+        // Wipe drawing canvas clean
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (confirm("您確定要清除此頁所有的手寫重點嗎？此操作不可撤銷。")) {
+                pushCanvasToUndoStack();
+                drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                clearAnnotationInDB(currentPage);
+                showToast("本頁筆記已清除");
+            }
+        });
+
+        // Export annotated textbook page as combined High-Res PNG image
+        document.getElementById('btn-export-png').addEventListener('click', () => {
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = pdfCanvas.width;
+            exportCanvas.height = pdfCanvas.height;
+            const exportCtx = exportCanvas.getContext('2d');
+
+            // Draw PDF background textbook layer
+            exportCtx.drawImage(pdfCanvas, 0, 0);
+            
+            // Layer the teachers ink overlay
+            exportCtx.drawImage(drawingCanvas, 0, 0);
+
+            // Export to PNG Download
+            const dataUrl = exportCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `課本重點標註_第${currentPage}頁.png`;
+            link.href = dataUrl;
+            link.click();
+
+            showToast("成功導出 PNG 圖檔！您可以將其傳送給學生。");
+        });
+
+        // Tooltip feedback action message display (Toast alert)
+        let toastTimeout;
+        function showToast(message) {
+            const toast = document.getElementById('toast-banner');
+            document.getElementById('toast-message').innerText = message;
+            
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(24px)';
+            }, 3000);
+        }
+
+        // Window Init Execution
+        window.onload = async function() {
+            try {
+                await initDatabase();
+            } catch (err) {
+                console.warn("IndexedDB initialization failed. Saving will fall back to active memory session.", err);
+            }
+            renderCurrentPage();
+        };
+    </script>
+</body>
+</html>
